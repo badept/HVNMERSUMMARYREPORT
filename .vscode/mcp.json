@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "codegraph",
+      "args": [
+        "serve",
+        "--mcp",
+        "--path",
+        "D:\\Downloads\\HVN_MER_VSCode-20261125T040809Z-1-001\\HVN_MER_VSCode"
+      ]
+    }
+  }
+}

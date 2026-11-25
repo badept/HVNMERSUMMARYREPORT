@@ -91,7 +91,7 @@ body { min-height: 100dvh; margin: 0; }
   font-weight: 850;
 }
 .hv-header .hv-avatar { border: 1px solid #ffffff50; background: #ffffff22; color: #fff; }
-.hv-header-copy { position: relative; z-index: 1; margin-top: 20px; }
+.hv-header-copy { position: relative; z-index: 1; min-width: 0; flex: 1; }
 .hv-header-copy h1 { margin: 0; font-size: 22px; font-weight: 850; letter-spacing: -.5px; line-height: 1.25; }
 .hv-header-copy p { margin: 5px 0 0; color: #d7eddd; font-size: 11px; }
 .hv-icon-button {
@@ -460,3 +460,82 @@ body { min-height: 100dvh; margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   #hvnRoot *, #hvnRoot *::before, #hvnRoot *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Compact area overview; detailed lists open on demand. */
+.hv-area-summary { display: grid; gap: 12px; }
+.hv-area-summary .hv-field { margin: 0; min-width: 0; flex: 1; }
+.hv-area-summary .hv-filter-row { margin: 0; align-items: end; }
+.hv-area-summary h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+.hv-area-progress { padding: 20px; }
+.hv-area-percentage { font-size: 54px; line-height: 1.15; font-weight: 650; color: var(--hv-dark); margin: 8px 0 14px; font-variant-numeric: tabular-nums; }
+.hv-area-percentage small { font-size: 26px; margin-left: 3px; }
+.hv-area-progress-caption { display: grid; gap: 3px; margin-top: 12px; }
+.hv-area-progress-caption span, .hv-area-display p { color: var(--hv-muted); font-size: 12px; }
+.hv-area-people > div { display: flex; align-items: baseline; gap: 14px; margin-top: 9px; }
+.hv-area-people strong { font-size: 23px; min-width: 72px; font-variant-numeric: tabular-nums; }
+.hv-area-people small { color: var(--hv-muted); font-size: 16px; font-weight: 400; }
+.hv-area-display-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; }
+.hv-area-display-grid > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.hv-area-display-grid span { font-size: 12px; }
+.hv-area-display-grid strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.hv-area-display p { margin: 12px 0 0; }
+
+/* SUP summary keeps context, four metrics and region comparison in one scan. */
+.hv-sup-overview .hv-kpi strong { font-variant-numeric: tabular-nums; }
+.hv-sup-overview .hv-kpi { min-height: 100px; }
+.hv-sup-overview .hv-kpi > span { font-size: 11px; line-height: 1.4; }
+.hv-sharing-status { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; color: var(--hv-muted); font-size: 11px; }
+
+/* SUP-specific metric hierarchy; shared Mer cards retain their layout. */
+.hv-header-copy .hv-sup-identity { display: block; margin-top: 7px; color: var(--hv-white); font-size: 18px; line-height: 1.3; font-weight: 700; }
+.hv-sup-metric { min-width: 0; padding: 11px 12px; border: 1px solid var(--hv-border); border-radius: 14px; background: var(--hv-white); }
+.hv-sup-metric-title { display: flex; align-items: center; gap: 6px; color: var(--hv-dark); }
+.hv-sup-metric-title svg { flex: 0 0 auto; }
+.hv-sup-metric-title h3 { margin: 0; color: var(--hv-text); font-size: 12px; line-height: 1.35; font-weight: 600; }
+.hv-sup-metric > strong { display: block; margin-top: 8px; font-size: 25px; line-height: 1.15; font-weight: 750; font-variant-numeric: tabular-nums; }
+.hv-sup-metric > strong small { color: var(--hv-muted); font-size: 18px; font-weight: 500; }
+.hv-sup-metric > span { display: block; margin-top: 4px; color: var(--hv-muted); font-size: 11px; line-height: 1.35; }
+.hv-region-grid.hv-region-grid-single { grid-template-columns: minmax(0, 1fr); }
+
+.hv-sup-overview .hv-area-display h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+
+.hv-area-overview-link { display: flex; align-items: center; justify-content: flex-end; gap: 5px; width: 100%; margin-top: 12px; padding: 10px 0 0; border: 0; border-top: 1px solid var(--hv-border); background: transparent; color: var(--hv-dark); font-size: 12px; font-weight: 600; cursor: pointer; }
+
+.hv-nav.hv-nav-sup { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.hv-team-summary { margin: 10px 0; color: var(--hv-dark); font-size: 12px; font-weight: 600; }
+.hv-team-filters { display: flex; gap: 6px; margin-bottom: 12px; }
+.hv-team-filters button { flex: 1; padding: 9px 5px; border: 1px solid var(--hv-border); border-radius: 10px; background: var(--hv-white); color: var(--hv-text); font-size: 12px; cursor: pointer; }
+.hv-team-filters button[aria-pressed="true"] { background: var(--hv-mint); border-color: var(--hv-green); color: var(--hv-dark); }
+.hv-team-person { overflow: hidden; border: 1px solid var(--hv-border); border-radius: 14px; background: var(--hv-white); }
+.hv-team-toggle { display: block; width: 100%; padding: 13px; text-align: left; border: 0; background: transparent; color: var(--hv-text); cursor: pointer; }
+.hv-team-toggle .hv-row { gap: 12px; align-items: start; }
+.hv-team-toggle .hv-row > span { display: flex; gap: 5px; align-items: center; white-space: nowrap; color: var(--hv-dark); font-weight: 600; }
+.hv-team-meta { margin-top: 4px; color: var(--hv-muted); font-size: 11px; }
+.hv-team-stores { border-top: 1px solid var(--hv-border); }
+.hv-team-store { padding: 12px 13px; border-bottom: 1px solid var(--hv-border); }
+.hv-team-store > strong { font-size: 12px; }
+.hv-team-store-status { margin: 5px 0; font-size: 11px; color: var(--hv-muted); }
+.hv-team-display { display: flex; flex-wrap: wrap; gap: 5px 12px; margin: 7px 0; font-size: 11px; }
+.hv-team-more { width: 100%; padding: 12px; background: var(--hv-mint); color: var(--hv-dark); border: 0; font-size: 12px; cursor: pointer; }
+
+.hv-report-header-title { display: flex; align-items: center; gap: 9px; }
+.hv-report-back { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border: 1px solid #ffffff55; border-radius: 10px; background: transparent; color: var(--hv-white); cursor: pointer; }
+
+.hv-header-row { position: relative; z-index: 1; align-items: flex-start; }
+
+/* Compact SUP report: retain all content and allow overflow for long reports. */
+.hv-phone:has(.hv-report-compact) > .hv-header { padding: calc(12px + env(safe-area-inset-top)) 14px 12px; }
+.hv-report-compact { padding-top: 10px; }
+.hv-report-compact > .hv-card { padding: 12px; }
+.hv-report-compact .hv-card-heading { margin-bottom: 7px; }
+.hv-report-compact .hv-report-values { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }
+.hv-report-compact .hv-report-values > * { padding: 5px 0; overflow-wrap: anywhere; }
+.hv-report-compact .hv-report-photo-card { margin-top: 10px; background: var(--hv-white); border-radius: var(--hv-radius); }
+.hv-report-photo-card .hv-section-heading { margin-bottom: 8px; }
+.hv-report-photo-card .hv-photos { margin-top: 0; }
+.hv-report-photo-card .hv-photo { margin: 0; background: var(--hv-white); border-radius: 10px; }
+.hv-report-photo-card .hv-photo img { height: clamp(100px, 17dvh, 155px); aspect-ratio: auto; object-fit: contain; background: var(--hv-white); }
+.hv-report-photo-card .hv-photo figcaption { background: var(--hv-white); }
+
+.hv-mer-identity { display: block; margin-bottom: 3px; color: var(--hv-white); font-size: 17px; font-weight: 600; }
+.hv-mer-work .hv-area-display h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }

@@ -196,6 +196,32 @@
     }
   ];
 
+  // Stable demo teams with varied workloads and completion.
+  const teams = [
+    ['hn', 'HN', ['Đỗ Minh Anh','Lê Quốc Huy','Vũ Thu Hà','Nguyễn Đức Long','Hoàng Ngọc Mai','Bùi Tuấn Kiệt','Phan Thanh Tâm','Đặng Hải Yến','Trịnh Minh Quân','Đinh Thảo Vy'], [5,4,3,2,5,1,3,0,4,0]],
+    ['ct', 'CT', ['Lê Minh Khang','Nguyễn Thùy Linh','Trần Hoàng Phúc','Phạm Ngọc Hân','Võ Thành Đạt','Đặng Bảo Trâm','Huỳnh Gia Bảo','Bùi Kim Ngân','Đỗ Quốc Bảo','Phan Mỹ Duyên','Lý Anh Tuấn','Mai Thanh Thảo','Châu Nhật Minh'], [3,1,4,0,2,3,1,0,2,4,1,0,2]]
+  ];
+  let employeeNumber = 4;
+  for (const [regionId, prefix, names, completions] of teams) {
+    names.forEach((name, index) => {
+      const employeeId = 'MER-' + String(employeeNumber++).padStart(3, '0');
+      employees.push({id: employeeId, name, role: 'mer', regionIds: [regionId], username: employeeId.toLowerCase()});
+      const workload = regionId === 'hn' ? [5,4,6,4,5][index % 5] : [4,5,4,3,6][index % 5];
+      const district = (regionId === 'hn' ? ['Đống Đa','Ba Đình','Tây Hồ','Hoàng Mai','Nam Từ Liêm'] : ['Ninh Kiều','Cái Răng','Bình Thủy','Ô Môn','Thốt Nốt'])[index % 5];
+      for (let visit = 0; visit < workload; visit++) {
+        const code = prefix + '-' + (101 + index * 10 + visit);
+        stores.push({id: code, code, name: ['WinMart+','Co.op Food','WinMart'][visit % 3] + ' ' + district + ' ' + (index + 1) + '.' + (visit + 1), regionId, employeeId, target: 1, address: (20 + index * 7 + visit * 12) + ' đường ' + district});
+        if (visit >= completions[index]) continue;
+        const time = String(8 + visit).padStart(2,'0') + ':' + String(10 + (index * 7 + visit * 11) % 45).padStart(2,'0');
+        sampleReports.push(createReport('DEMO-TEAM-' + code, code, employeeId, regionId, time, {
+          display: {outside: 1 + (index + visit) % 3, glass: (index + visit) % 2, coc: (index + 2 * visit) % 3, ge: (index + visit + 1) % 2, tree: index % 3 === 0 ? 1 : 0},
+          stock: {expiry: index % 4 === 0 ? '2 thùng cần ưu tiên xuất trong tháng.' : 'Không ghi nhận.', packaging: visit % 2 ? 'Heineken lon 330ml' : 'Tiger lon 330ml', notes: index % 4 === 0 ? 'Đã thông tin cho quản lý cửa hàng.' : ''},
+          notes: ['Đã bổ sung sản phẩm và nhãn giá.','Hoàn tất kiểm tra quầy kệ.','Đã sắp xếp lại vị trí trưng bày.'][(index + visit) % 3]
+        }));
+      }
+    });
+  }
+
   const displayFields = [
     { id: 'outside', label: 'Ngoài kệ chính / tủ lạnh có bia HVN' },
     { id: 'glass', label: 'Mặt kính' },

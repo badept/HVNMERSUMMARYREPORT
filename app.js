@@ -11,8 +11,6 @@
     user: null,
     screen: 'loading',
     selectedStoreId: '',
-    selectedRegionId: '',
-    regionDetailReturnScreen: 'dashboard',
     reportDetailReturnScreen: '',
     selectedEmployeeId: '',
     selectedReportId: '',
@@ -21,6 +19,10 @@
     filterRegionId: 'all',
     merMonth: localDateISO().slice(0, 7),
     search: '',
+    merStoreStatus: 'all',
+    teamStatus: 'all',
+    expandedEmployeeId: '',
+    teamShowAll: false,
     draft: null,
     pendingPhotoFiles: 0,
     savingReport: false,
@@ -196,6 +198,17 @@
       });
       updated = true;
     }
+    if (!data.teamFixtureAdded) {
+      const fixture = seedData();
+      for (const report of fixture.reports.filter(item => item.id.startsWith('DEMO-TEAM-'))) {
+        if (data.reports.some(item => item.storeId === report.storeId && item.date === report.date)) continue;
+        data.reports.push(report);
+        const checkIn = fixture.checkIns.find(item => item.storeId === report.storeId && item.date === report.date);
+        if (!data.checkIns.some(item => item.key === checkIn.key)) data.checkIns.push(checkIn);
+      }
+      data.teamFixtureAdded = true;
+      updated = true;
+    }
     if (updated) persistData(data);
     return data;
   }
@@ -239,7 +252,7 @@
       timestamp: report.submittedAt,
       mockLocation: true
     }));
-    return { version: DATA_VERSION, reports, checkIns, deliveries: [] };
+    return { version: DATA_VERSION, reports, checkIns, deliveries: [], teamFixtureAdded: true };
   }
 
   function checkInKey(storeId, date) {
@@ -436,8 +449,7 @@
   function appHeader(title, subtitle = '') {
     const person = currentPerson();
     const initials = person ? person.name.split(' ').map(part => part[0]).slice(-2).join('') : 'HV';
-    const brandSub = state.user.role === 'sup' ? 'TEAM SUPERVISOR' : 'MERCHANDISER';
-    return `<header class="hv-header"><div class="hv-header-row"><div class="hv-brand"><span class="hv-brand-mark">H</span><span>HVN MER<small>${brandSub}</small></span></div><button type="button" class="hv-avatar" data-hv-act="account" aria-label="Mở tài khoản">${escapeHtml(initials)}</button></div><div class="hv-header-copy"><h1>${title}</h1><p>${subtitle}</p></div></header>`;
+    return `<header class="hv-header"><div class="hv-header-row"><div class="hv-header-copy"><h1>${title}</h1>${subtitle ? `<p>${subtitle}</p>` : ''}</div><button type="button" class="hv-avatar" data-hv-act="account" aria-label="Mở tài khoản">${escapeHtml(initials)}</button></div></header>`;
   }
 
   function dateFilter() {
@@ -474,14 +486,13 @@
 
   function bottomNavigation() {
     const items = state.user.role === 'sup'
-      ? [['dashboard', 'Tổng quan', 'home'], ['employees', 'Nhân viên', 'people'], ['regions', 'Khu vực', 'region'], ['reports', 'Báo cáo', 'report']]
+      ? [['dashboard', 'Tổng quan', 'home'], ['employees', 'Đội ngũ & BC', 'people']]
       : [['dashboard', 'Tổng quan', 'home'], ['report-list', 'Báo cáo', 'store'], ['history', 'Lịch sử', 'clock'], ['account', 'Tài khoản', 'user']];
     const selected = state.screen === 'employee-detail' ? 'employees'
-      : state.screen === 'region-detail' ? 'regions'
-      : state.screen === 'report-detail' ? (state.user.role === 'sup' ? 'reports' : 'history')
+      : state.screen === 'report-detail' ? (state.user.role === 'sup' ? 'employees' : 'history')
       : state.screen === 'check-in' || state.screen === 'report-form' ? (state.user.role === 'sup' ? 'reports' : 'report-list')
       : state.screen;
-    return `<nav class="hv-nav" aria-label="Điều hướng chính">${items.map(([page, label, image]) => `<button type="button" class="hv-nav-button ${selected === page ? 'active' : ''}" data-hv-route="${page}" aria-current="${selected === page ? 'page' : 'false'}">${icon(image, 20)}<span>${label}</span></button>`).join('')}</nav>`;
+    return `<nav class="hv-nav ${state.user.role === 'sup' ? 'hv-nav-sup' : ''}" aria-label="Điều hướng chính">${items.map(([page, label, image]) => `<button type="button" class="hv-nav-button ${selected === page ? 'active' : ''}" data-hv-route="${page}" aria-current="${selected === page ? 'page' : 'false'}">${icon(image, 20)}<span>${label}</span></button>`).join('')}</nav>`;
   }
 
   function progressCaption(label, percentage) {
@@ -509,12 +520,13 @@
   function renderRegionCard(region, date = state.filterDate, selected = false) {
     const stores = filteredStores(region.id);
     const stats = aggregate(stores, date);
-    const reportCount = stats.reportsSent;
-    return `<button type="button" class="hv-region-card ${selected ? 'selected' : ''}" data-hv-act="select-region" data-region-id="${region.id}" aria-label="Xem tổng quan khu vực ${escapeHtml(region.name)}"><div class="hv-row"><strong>${escapeHtml(region.name)}</strong>${statusChip(`${stats.percent}%`)}</div><div class="hv-region-stats"><div><b>${stats.activeMer}</b><span>Mer hoạt động</span></div><div><b>${stats.stores}</b><span>Store / Target</span></div><div><b>${stats.completed}</b><span>Đã báo cáo</span></div><div><b>${stats.pending}</b><span>Chưa báo cáo</span></div></div>${displayProgress(stats.percent)}<div class="hv-progress-caption"><span>${reportCount}/${stats.reportTotal} báo cáo gửi</span><span>${stats.completed}/${stats.target} Target</span></div><div class="hv-region-card-action">${selected ? 'Đang xem khu vực' : 'Xem báo cáo tổng quan'} ${icon('next', 14)}</div></button>`;
+    const managed = Mock.employees.filter(employee => employee.regionIds.includes(region.id)).length;
+    const visited = stores.filter(store => reportForStore(store.id, date) || checkInFor(store.id, date)).length;
+    return `<button type="button" class="hv-region-card ${selected ? 'selected' : ''}" data-hv-act="select-region" data-region-id="${region.id}" aria-label="Lọc khu vực ${escapeHtml(region.name)}"><div class="hv-row"><strong>${escapeHtml(region.name)}</strong></div><div class="hv-region-stats"><div><b>${stats.activeMer}/${managed}</b><span>Hoạt động / Quản lý</span></div><div><b>${visited}/${stats.stores}</b><span>Store đã đi / PLAN</span></div><div><b>${stats.completed}</b><span>Đã báo cáo</span></div><div><b>${stats.pending}</b><span>Chưa báo cáo</span></div></div><div class="hv-region-card-action">${selected ? 'Đang xem khu vực' : 'Xem khu vực'} ${icon('next', 14)}</div></button>`;
   }
 
   function renderLogin() {
-    return `<main class="hv-login-wrap"><section class="hv-login" aria-labelledby="hv-login-title"><div class="hv-login-brand"><span class="hv-brand-mark">H</span><strong>HVN Mer</strong></div><h1 id="hv-login-title">Đăng nhập</h1><p>Đăng nhập demo để mở đúng màn hình theo vai trò.</p><form id="hvLoginForm"><div class="hv-field"><label for="hvUsername">Mã nhân viên</label><input class="hv-input" id="hvUsername" name="username" autocomplete="username" placeholder="Nhập mã nhân viên" required></div><div class="hv-field"><label for="hvPassword">Mật khẩu</label><input class="hv-input" id="hvPassword" name="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" required></div>${state.loginError ? `<div class="hv-login-error" role="alert">${escapeHtml(state.loginError)}</div>` : ''}<div style="margin-top:16px">${button('Đăng nhập', 'login', { full: true })}</div></form><div class="hv-demo-accounts"><div class="hv-overline">Tài khoản demo</div><button type="button" class="hv-demo-account" data-hv-act="fill-login" data-demo-user="mer001"><span>Mer · Phạm Hải Đăng</span><b>mer001 / 123456</b></button><button type="button" class="hv-demo-account" data-hv-act="fill-login" data-demo-user="sup001"><span>Sup · Nguyễn Xuân Toàn</span><b>sup001 / 123456</b></button></div><div class="hv-help">Đăng nhập chỉ mô phỏng frontend; không phải cơ chế xác thực bảo mật.</div></section></main>`;
+    return `<main class="hv-login-wrap"><section class="hv-login" aria-labelledby="hv-login-title"><h1 id="hv-login-title">Đăng nhập</h1><p>Đăng nhập demo để mở đúng màn hình theo vai trò.</p><form id="hvLoginForm"><div class="hv-field"><label for="hvUsername">Mã nhân viên</label><input class="hv-input" id="hvUsername" name="username" autocomplete="username" placeholder="Nhập mã nhân viên" required></div><div class="hv-field"><label for="hvPassword">Mật khẩu</label><input class="hv-input" id="hvPassword" name="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" required></div>${state.loginError ? `<div class="hv-login-error" role="alert">${escapeHtml(state.loginError)}</div>` : ''}<div style="margin-top:16px">${button('Đăng nhập', 'login', { full: true })}</div></form><div class="hv-demo-accounts"><div class="hv-overline">Tài khoản demo</div><button type="button" class="hv-demo-account" data-hv-act="fill-login" data-demo-user="mer001"><span>Mer · Phạm Hải Đăng</span><b>mer001 / 123456</b></button><button type="button" class="hv-demo-account" data-hv-act="fill-login" data-demo-user="sup001"><span>Sup · Nguyễn Xuân Toàn</span><b>sup001 / 123456</b></button></div><div class="hv-help">Đăng nhập chỉ mô phỏng frontend; không phải cơ chế xác thực bảo mật.</div></section></main>`;
   }
 
   function renderLoading() {
@@ -554,8 +566,7 @@
     const screens = {
       dashboard: () => state.user.role === 'sup' ? renderSupDashboard() : renderMerDashboard(),
       employees: renderEmployees,
-      regions: renderRegions,
-      'region-detail': renderRegionDetail,
+      regions: renderSupDashboard,
       reports: renderReports,
       'report-list': renderMerReportList,
       'check-in': renderCheckIn,
@@ -569,70 +580,58 @@
     return screen ? screen() : state.user.role === 'sup' ? renderSupDashboard() : renderMerDashboard();
   }
 
+  function renderSupMetric(title, value, baseline, image) {
+    const parts = String(value).split('/');
+    const number = escapeHtml(parts[0]) + (parts.length > 1 ? '<small> / ' + escapeHtml(parts[1]) + '</small>' : '');
+    return '<article class="hv-sup-metric"><div class="hv-sup-metric-title">' + icon(image, 15) + '<h3>' + title + '</h3></div><strong>' + number + '</strong><span>' + baseline + '</span></article>';
+  }
+
+  function renderSupMetrics(stores, regions) {
+    const stats = aggregate(stores);
+    const managed = Mock.employees.filter(employee => regions.some(region => employee.regionIds.includes(region.id))).length;
+    return '<div class="hv-kpi-grid">' +
+      renderSupMetric('Nhân sự', stats.activeMer + '/' + managed, 'Hoạt động / Quản lý', 'people') +
+      renderSupMetric('Store trưng bày', stats.completed + '/' + stats.target, 'Thực hiện / PLAN', 'store') +
+      renderSupMetric('Báo cáo đã nhận', stats.reportsSent + '/' + stats.reportTotal, 'Đã nhận / Total PLAN', 'report') +
+      renderSupMetric('Hoàn thành', stats.target ? stats.percent + '%' : '—', 'Theo PLAN', 'check') + '</div>';
+  }
+
   function renderSupDashboard() {
     const person = currentPerson();
     const stores = filteredStores();
     const stats = aggregate(stores);
-    const regions = state.filterRegionId === 'all'
-      ? visibleRegions()
-      : visibleRegions().filter(region => region.id === state.filterRegionId);
-    const reports = stats.reports;
-    const missing = stores.filter(store => !reportForStore(store.id, state.filterDate));
-    const attention = missing.slice(0, 3).map(store =>
-      `<div class="hv-store-foot"><span>${escapeHtml(store.code)} · ${escapeHtml(store.name)}</span><span class="hv-subtle">${escapeHtml(employeeById(store.employeeId).name)}</span></div>`
-    ).join('');
-    const dateText = formatDate(state.filterDate);
-    const systemDeliveryStatus = summaryDelivery('system');
-    const zaloDeliveryStatus = summaryDelivery('zalo');
-    const deliverySummary = systemDeliveryStatus
-      ? `<div class="hv-help">Hệ thống demo: đã ghi nhận ${new Date(systemDeliveryStatus.sentAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}. Chưa gửi tới hệ thống thật.</div>`
-      : '';
-    const zaloSummary = zaloDeliveryStatus
-      ? `<div class="hv-help">${zaloDeliveryStatus.status === 'shared' ? 'Đã mở chia sẻ' : 'Đã copy nội dung · chờ gửi Zalo'} · ${new Date(zaloDeliveryStatus.sentAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}.</div>`
-      : '';
-    return `${appHeader(`Xin chào, ${escapeHtml(person.name)}`, `${escapeHtml(person.title)} · ${dateText}`)}<main class="hv-content"><div class="hv-filter-row">${dateFilter()}${regionFilter()}</div><div class="hv-kpi-grid">${renderKpi(String(stats.activeMer), 'Nhân viên ra thị trường', 'Mer đã check-in hoặc gửi báo cáo trong ngày đã chọn.', 'people')}${renderKpi(`${stats.completed}/${stats.target}`, 'Store đã trưng bày / Target', `${stats.completed} cửa hàng có báo cáo trên ${stats.target} cửa hàng được giao. Tỷ lệ hoàn thành: ${stats.percent}%.`, 'store')}${renderKpi(`${stats.reportsSent}/${stats.reportTotal}`, 'Báo cáo đã gửi / Tổng', 'Đã gửi trong ngày đã chọn / số cửa hàng được giao.', 'report')}${renderKpi(`${stats.percent}%`, 'Tỷ lệ hoàn thành', `${stats.completed} Target hoàn thành / ${stats.target} Target được giao.`, 'check')}</div><div class="hv-help">${icon('info', 15)} Khi chọn “Tất cả khu vực”, chỉ tổng hợp ${visibleRegions().map(region => escapeHtml(region.name)).join(' và ')} — các khu vực SUP được phân công.</div><section class="hv-section">${sectionHeading('Tiến độ khu vực', 'Target, báo cáo và nhân sự') }<div class="hv-region-grid">${regions.map(region => renderRegionCard(region)).join('')}</div></section><section class="hv-section"><article class="hv-card">${cardHeading('Tóm tắt nhanh', `${dateText} · ${reports.length} báo cáo đã nhận`)}<div class="hv-row">${statusChip(`${stats.completed} hoàn thành`)}${statusChip(`${stats.pending} cần tiếp tục`, stats.pending ? 'pending' : 'done')}</div><div class="hv-help">${missing.length ? `${missing.length} cửa hàng chưa có báo cáo. ${attention ? `Cần theo dõi: ${missing.slice(0, 3).map(store => `${store.code} (${employeeById(store.employeeId).name})`).join(', ')}${missing.length > 3 ? '…' : ''}.` : ''}` : 'Tất cả cửa hàng trong bộ lọc đã gửi báo cáo.'}</div><div style="margin-top:11px">${button('Xem báo cáo cửa hàng', 'go-reports', { kind: 'secondary', full: true, icon: 'report' })}</div></article></section><section class="hv-section">${sectionHeading('Nhân viên', 'Tiến độ trong phạm vi')}<div class="hv-list">${renderEmployeeCards(stores)}</div></section><section class="hv-section">${sectionHeading('Báo cáo cuối ngày', 'Chọn nơi gửi báo cáo theo bộ lọc hiện tại')}<article class="hv-card"><div class="hv-row"><div><div class="hv-store-title">Báo cáo ${dateText}</div><div class="hv-store-meta">${state.filterRegionId === 'all' ? 'Tất cả khu vực được giao' : escapeHtml(regionById(state.filterRegionId).name)}</div></div>${statusChip(`${stats.completed}/${stats.target}`)}</div><div class="hv-delivery-actions"><button type="button" class="hv-button full" data-hv-act="send-sup-system">${icon('send', 17)} Gửi lên hệ thống</button><button type="button" class="hv-button secondary full" data-hv-act="send-sup-zalo">${icon('copy', 17)} Chia sẻ / copy Zalo</button></div>${deliverySummary}${zaloSummary}<div class="hv-subtle" style="margin-top:9px">Gửi hệ thống được mô phỏng và lưu trên thiết bị; chia sẻ Zalo dùng bảng chia sẻ của WebView hoặc sao chép nội dung. Chưa kết nối hệ thống thật.</div></article></section></main>`;
-    const systemDelivery = summaryDelivery('system');
-    const zaloDelivery = summaryDelivery('zalo');
-    const systemStatus = systemDelivery
-      ? `Hệ thống demo: đã ghi nhận ${new Date(systemDelivery.sentAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}. Chưa gửi tới hệ thống thật.`
-      : 'Chưa gửi báo cáo tổng hợp lên hệ thống demo.';
-    const zaloStatus = zaloDelivery
-      ? `${zaloDelivery.status === 'shared' ? 'Đã mở chia sẻ' : 'Đã copy nội dung · chờ gửi Zalo'} · ${new Date(zaloDelivery.sentAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}.`
-      : '';
-    return `${appHeader(`Xin chào, ${escapeHtml(person.name)}`, `${escapeHtml(person.title)} · ${dateText}`)}<main class="hv-content"><div class="hv-filter-row">${dateFilter()}${regionFilter()}</div><div class="hv-kpi-grid">${renderKpi(String(stats.activeMer), 'Nhân viên ra thị trường', 'Mer đã check-in hoặc gửi báo cáo trong ngày đã chọn.', 'people')}${renderKpi(`${stats.completed}/${stats.target}`, 'Store đã trưng bày / Target', `${stats.completed} cửa hàng có báo cáo trên ${stats.target} cửa hàng được giao. Tỷ lệ hoàn thành: ${stats.percent}%.`, 'store')}${renderKpi(`${stats.reportsSent}/${stats.reportTotal}`, 'Báo cáo đã gửi / Tổng', 'Đã gửi trong ngày đã chọn / số cửa hàng được giao.', 'report')}${renderKpi(`${stats.percent}%`, 'Tỷ lệ hoàn thành', `${stats.completed} Target hoàn thành / ${stats.target} Target được giao.`, 'check')}</div><div class="hv-help">${icon('info', 15)} Khi chọn “Tất cả khu vực”, chỉ tổng hợp ${visibleRegions().map(region => escapeHtml(region.name)).join(' và ')} — các khu vực SUP được phân công.</div><section class="hv-section">${sectionHeading('Tiến độ khu vực', 'Target, báo cáo và nhân sự') }<div class="hv-region-grid">${regions.map(region => renderRegionCard(region)).join('')}</div></section><section class="hv-section"><article class="hv-card">${cardHeading('Tóm tắt nhanh', `${dateText} · ${reports.length} báo cáo đã nhận`)}<div class="hv-row">${statusChip(`${stats.completed} hoàn thành`)}${statusChip(`${stats.pending} cần tiếp tục`, stats.pending ? 'pending' : 'done')}</div><div class="hv-help">${missing.length ? `${missing.length} cửa hàng chưa có báo cáo. ${attention ? `Cần theo dõi: ${missing.slice(0, 3).map(store => `${store.code} (${employeeById(store.employeeId).name})`).join(', ')}${missing.length > 3 ? '…' : ''}.` : ''}` : 'Tất cả cửa hàng trong bộ lọc đã gửi báo cáo.'}</div><div style="margin-top:11px">${button('Xem báo cáo cửa hàng', 'go-reports', { kind: 'secondary', full: true, icon: 'report' })}</div></article></section><section class="hv-section">${sectionHeading('Nhân viên', 'Tiến độ trong phạm vi')}<div class="hv-list">${renderEmployeeCards(stores)}</div></section><section class="hv-section">${sectionHeading('Báo cáo cuối ngày', 'Xem lại số liệu trước khi gửi')}<article class="hv-card"><div class="hv-row"><div><div class="hv-store-title">Báo cáo ${dateText}</div><div class="hv-store-meta">${state.filterRegionId === 'all' ? 'Tất cả khu vực được giao' : escapeHtml(regionById(state.filterRegionId).name)}</div></div>${statusChip(`${stats.completed}/${stats.target}`)}</div><div class="hv-delivery-actions"><button type="button" class="hv-button full" data-hv-act="open-sup-report-preview">${icon('send', 17)} Gửi báo cáo</button><button type="button" class="hv-button secondary full" data-hv-act="open-sup-report-preview">${icon('copy', 17)} Copy / chia sẻ Zalo</button></div><div class="hv-help">${escapeHtml(systemStatus)}${zaloStatus ? `<br>${escapeHtml(zaloStatus)}` : ''}</div><div class="hv-subtle" style="margin-top:9px">Báo cáo sẽ mở phần xem trước trước khi gửi hoặc sao chép.</div></article></section></main>`;
+    const regions = visibleRegions().filter(region => state.filterRegionId === 'all' || region.id === state.filterRegionId);
+    return appHeader('Báo cáo trong ngày', '<span class="hv-sup-identity">SUP ' + escapeHtml(person.name) + '</span>') + '<main class="hv-content hv-sup-overview"><div class="hv-filter-row">' + dateFilter() + regionFilter() + '</div>' + renderSupMetrics(stores, regions) +
+       (state.filterRegionId !== 'all' && regions.length === 1
+        ? '<div class="hv-section">' + renderAreaDisplay(stats.reports, regions[0].id) + '</div>'
+        : '<section class="hv-section">' + sectionHeading('Tiến độ khu vực') + '<div class="hv-region-grid">' + regions.map(region => renderRegionCard(region)).join('') + '</div></section>' + renderRegionComparison()) + '</main>';
   }
 
   function renderMerDashboard() {
     const person = currentPerson();
     const stores = visibleStores();
     const date = state.filterDate;
-    const today = localDateISO();
-    const historical = date !== today;
-    const stats = aggregate(stores, date);
+    const historical = date !== localDateISO();
     const reports = reportsFor(date, stores);
-    const displayTotals = Object.fromEntries(Mock.displayFields.map(field => [
-      field.id,
-      reports.reduce((sum, report) => sum + (Number(report.display[field.id]) || 0), 0)
-    ]));
-    const displaySummary = Mock.displayFields.map(field =>
-      `<div class="hv-display-total"><span>${escapeHtml(field.label)}</span><strong>${displayTotals[field.id]}</strong></div>`
-    ).join('');
-    const storeCards = stores.map(store => renderMerDailyStoreCard(store, date, historical)).join('');
-    return `${appHeader(`Xin chào, ${escapeHtml(person.name)}`, `${escapeHtml(regionById(person.regionIds[0]).name)} · ${historical ? 'Xem lịch sử' : 'Hôm nay'}`)}<main class="hv-content">${merDateSelector()}${historical ? `<div class="hv-callout hv-history-callout">${icon('info', 16)} Chế độ xem lịch sử · Báo cáo chỉ đọc, không thể tạo hoặc thay đổi dữ liệu ngày cũ.</div>` : ''}<section class="hv-card hv-mer-summary"><div class="hv-row"><div><div class="hv-overline">${historical ? 'SUMMARY NGÀY ĐÃ CHỌN' : 'SUMMARY HÔM NAY'}</div><div class="hv-store-title" style="margin-top:4px">${stats.completed} / ${stats.stores} cửa hàng đã báo cáo</div></div>${statusChip(`${stats.percent}%`)}</div><div style="margin-top:11px">${displayProgress(stats.percent)}${progressCaption('Tiến độ báo cáo', stats.percent)}</div><div class="hv-kpi-grid" style="margin-top:10px">${renderKpi(String(stats.stores), 'Store được giao', 'Tổng cửa hàng được phân công cho bạn.', 'store')}${renderKpi(String(stats.completed), 'Đã báo cáo', 'Báo cáo đã lưu trong ngày đã chọn.', 'check')}${renderKpi(String(stats.pending), 'Chưa báo cáo', 'Cửa hàng chưa có báo cáo trong ngày.', 'clock')}${renderKpi(String(reports.length), 'Báo cáo đã lưu', 'Số báo cáo trong ngày đã chọn.', 'report')}</div></section><section class="hv-section"><article class="hv-card">${cardHeading('Tổng điểm trưng bày', `${reports.length} báo cáo · ${formatDate(date)}`)}<div class="hv-display-total-grid">${displaySummary}</div></article></section>${renderMerMonthlySummary()}${!historical ? `<section class="hv-section"><div class="hv-card">${button('BÁO CÁO ĐIỂM BÁN', 'go-report-list', { full: true, icon: 'plus' })}</div></section>` : ''}<section class="hv-section">${sectionHeading('Cửa hàng được giao', `${stores.length} điểm bán · ${formatDate(date)}`)}${!reports.length ? `<div class="hv-empty hv-mer-empty"><strong>${historical ? 'Chưa có báo cáo trong ngày này' : 'Chưa có báo cáo hôm nay'}</strong>${historical ? 'Không có dữ liệu báo cáo để hiển thị. Các cửa hàng vẫn được liệt kê bên dưới ở trạng thái chưa báo cáo.' : 'Bắt đầu báo cáo tại cửa hàng được phân công.'}</div>` : ''}<div class="hv-list">${storeCards}</div></section></main>`;
+    const completed = stores.filter(store => reportForStore(store.id, date)).length;
+    const listed = stores.filter(store => state.merStoreStatus === 'all' || (state.merStoreStatus === 'done' ? !!reportForStore(store.id, date) : !reportForStore(store.id, date)))
+      .slice().sort((a,b) => Number(!!reportForStore(a.id,date)) - Number(!!reportForStore(b.id,date)) || a.code.localeCompare(b.code));
+    const regionNames = person.regionIds.map(id => regionById(id).name).join(' · ');
+    return appHeader('Công việc của tôi', '<span class="hv-mer-identity">' + escapeHtml(person.name) + '</span>' + escapeHtml(regionNames)) + '<main class="hv-content hv-mer-work">' + merDateSelector() +
+      (historical ? '<div class="hv-callout hv-history-callout">Chỉ xem · Ngày đã chọn</div>' : '') +
+      '<div class="hv-kpi-grid">' + renderSupMetric('Actual / Plan', completed + '/' + stores.length, 'Cửa hàng đã báo cáo', 'store') + renderSupMetric('Chưa báo cáo', stores.length - completed, 'Cửa hàng', 'clock') + '</div><div class="hv-section">' + renderAreaDisplay(reports) + '</div><section class="hv-section">' + sectionHeading('Cửa hàng của tôi', stores.length + ' điểm bán') +
+      '<div class="hv-team-filters">' + [['all','Tất cả'],['pending','Chưa xong'],['done','Đã báo cáo']].map(([value,label]) => '<button type="button" data-hv-act="mer-store-status" data-status="' + value + '" aria-pressed="' + (state.merStoreStatus === value) + '">' + label + '</button>').join('') + '</div><div class="hv-list">' + (listed.map(store => renderMerDailyStoreCard(store,date,historical)).join('') || '<div class="hv-empty">Không có cửa hàng trong bộ lọc này.</div>') + '</div></section></main>';
   }
 
   function renderMerDailyStoreCard(store, date, historical) {
     const report = reportForStore(store.id, date);
     const status = report ? statusChip('Đã báo cáo') : statusChip('Chưa báo cáo', 'pending');
-    const displaySummary = report
-      ? Mock.displayFields.map(field => `${field.id === 'outside' ? 'Ngoài kệ' : field.id === 'glass' ? 'Mặt kính' : field.id === 'coc' ? 'COC' : field.id === 'ge' ? 'GE' : 'Cây bia'} ${report.display[field.id]}`).join(' · ')
-      : historical ? 'Không có báo cáo ngày này' : 'Chưa gửi báo cáo';
     const action = report
-      ? `<button type="button" class="hv-button small secondary" data-hv-act="open-report-detail" data-report-id="${escapeHtml(report.id)}">Xem báo cáo</button>`
+      ? `<button type="button" class="hv-button small secondary" data-hv-act="open-report-detail" data-report-id="${escapeHtml(report.id)}">Số liệu & ảnh</button>`
       : !historical
         ? `<button type="button" class="hv-button small" data-hv-act="start-report" data-store-id="${escapeHtml(store.id)}">Báo cáo ${icon('next', 14)}</button>`
         : '';
-    return `<article class="hv-store-row hv-mer-day-store"><div class="hv-row"><div class="hv-mer-store-ident"><span class="hv-store-number">${storeNumber(store.id)}</span><div><div class="hv-store-title">${escapeHtml(store.code)} · ${escapeHtml(store.name)}</div><div class="hv-store-meta">${escapeHtml(regionById(store.regionId).name)}</div></div></div>${status}</div><div class="hv-mer-day-metrics">${escapeHtml(displaySummary)}</div><div class="hv-store-foot"><span class="hv-subtle">${report ? `Báo cáo lúc ${new Date(report.submittedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : `Target ${store.target}`}</span>${action}</div></article>`;
+    return `<article class="hv-store-row hv-mer-day-store"><div class="hv-row"><div class="hv-mer-store-ident"><span class="hv-store-number">${storeNumber(store.id)}</span><div><div class="hv-store-title">${escapeHtml(store.code)} · ${escapeHtml(store.name)}</div><div class="hv-store-meta">${escapeHtml(regionById(store.regionId).name)}</div></div></div>${status}</div><div class="hv-store-foot"><span class="hv-subtle">${report ? `Báo cáo lúc ${new Date(report.submittedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : historical ? 'Chưa có báo cáo ngày này' : checkInFor(store.id, date) ? 'Đã check-in, chưa báo cáo' : 'Chưa có hoạt động'}</span>${action}</div></article>`;
   }
 
   function renderEmployeeCards(stores = filteredStores()) {
@@ -652,33 +651,55 @@
 
   function renderEmployees() {
     const stores = filteredStores();
-    const people = Mock.employees.filter(person => stores.some(store => store.employeeId === person.id));
-    return `${appHeader('Đội ngũ Mer', `${people.length} nhân viên · ${formatDate(state.filterDate)}`)}<main class="hv-content"><div class="hv-filter-row">${dateFilter()}${regionFilter()}</div><section class="hv-section"><div class="hv-list">${renderEmployeeCards(stores)}</div></section></main>`;
+    const people = Mock.employees.filter(person => person.regionIds.some(id => visibleRegions().some(region => region.id === id)) && (state.filterRegionId === 'all' || person.regionIds.includes(state.filterRegionId)));
+    const search = state.search.trim().toLocaleLowerCase('vi');
+    const matches = value => value.toLocaleLowerCase('vi').includes(search);
+    const groups = people.map(person => {
+      const assigned = stores.filter(store => store.employeeId === person.id);
+      const reports = assigned.map(store => reportForStore(store.id)).filter(Boolean);
+      const done = reports.length;
+      const complete = assigned.length > 0 && done === assigned.length;
+      const personMatch = matches(person.name + ' ' + person.id);
+      const matchingStores = assigned.filter(store => matches(store.code + ' ' + store.name));
+      if (search && !personMatch && !matchingStores.length) return '';
+      if (state.teamStatus === 'done' && !complete || state.teamStatus === 'pending' && complete) return '';
+      if (state.teamStatus === 'stores-done' && !done) return '';
+      const open = state.expandedEmployeeId === person.id || (search && !personMatch && matchingStores.length > 0);
+      const visited = assigned.filter(store => reportForStore(store.id) || checkInFor(store.id)).length;
+      const latest = reports.map(report => report.submittedAt).sort().pop();
+      const latestText = latest ? new Date(latest).toLocaleTimeString('vi-VN', {hour: '2-digit', minute: '2-digit'}) : '—';
+      const listed = (search && !personMatch ? matchingStores : assigned).filter(store => state.teamStatus !== 'stores-done' || reportForStore(store.id)).slice().sort((a,b) => Number(!!reportForStore(a.id)) - Number(!!reportForStore(b.id)) || a.code.localeCompare(b.code));
+      const shown = search || state.teamShowAll && state.expandedEmployeeId === person.id ? listed : listed.slice(0,2);
+      const rows = shown.map(store => {
+        const report = reportForStore(store.id);
+        const checkIn = checkInFor(store.id);
+        const status = report ? 'Đã báo cáo ' + new Date(report.submittedAt).toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit'}) : checkIn ? 'Đã check-in, chưa báo cáo' : 'Chưa có hoạt động';
+        const values = report ? '<div class="hv-team-display">' + [['outside','Ngoài kệ'],['glass','Kính'],['coc','COC'],['ge','GE'],['tree','Cây']].map(([key,label]) => '<span>' + label + ' <b>' + (Number(report.display[key]) || 0) + '</b></span>').join('') + '</div>' : '';
+        return '<article class="hv-team-store"><strong>' + escapeHtml(store.code + ' · ' + store.name) + '</strong><div class="hv-team-store-status">' + status + '</div>' + values + (report ? '<button type="button" class="hv-inline-link" data-hv-act="open-report-detail" data-report-id="' + escapeHtml(report.id) + '">Số liệu & ảnh ' + icon('next',14) + '</button>' : '') + '</article>';
+      }).join('');
+      return '<section class="hv-team-person"><button type="button" class="hv-team-toggle" data-hv-act="team-toggle" data-employee-id="' + person.id + '" aria-expanded="' + !!open + '"><div class="hv-row"><strong>' + escapeHtml(person.name) + '</strong><span>' + done + '/' + assigned.length + ' ' + icon(open ? 'back' : 'next',14) + '</span></div><div class="hv-team-meta">' + escapeHtml(person.id + ' · ' + person.regionIds.map(id => regionById(id).name).join(', ')) + (complete ? ' · Hoàn thành' : '') + '</div><div class="hv-team-meta">Đã đi ' + visited + '/' + assigned.length + ' · BC gần nhất ' + latestText + '</div></button>' + (open ? '<div class="hv-team-stores">' + (rows || '<div class="hv-empty">Chưa được giao cửa hàng.</div>') + (shown.length < listed.length ? '<button type="button" class="hv-team-more" data-hv-act="team-more" data-employee-id="' + person.id + '">Xem đủ ' + listed.length + ' cửa hàng</button>' : '') + '</div>' : '') + '</section>';
+    }).filter(Boolean).join('');
+    const count = stores.filter(store => reportForStore(store.id)).length;
+    return appHeader('Đội ngũ & Báo cáo', '<span class="hv-sup-identity">SUP ' + escapeHtml(currentPerson().name) + '</span>') + '<main class="hv-content"><div class="hv-filter-row">' + dateFilter() + regionFilter() + '</div><div class="hv-field"><input class="hv-input" id="hvSearch" type="search" value="' + escapeHtml(state.search) + '" placeholder="Tìm nhân viên, mã hoặc tên store" aria-label="Tìm nhân viên hoặc cửa hàng"></div><div class="hv-team-summary">' + people.length + ' nhân sự · ' + count + '/' + stores.length + ' báo cáo · Còn ' + (stores.length-count) + '</div><div class="hv-team-filters">' + [['all','Tất cả'],['pending','Chưa xong'],['done','Hoàn thành'],['stores-done','CH đã hoàn thành']].map(([value,label]) => '<button type="button" data-hv-act="team-status" data-status="' + value + '" aria-pressed="' + (state.teamStatus===value) + '">' + label + '</button>').join('') + '</div><div class="hv-list">' + (groups || '<div class="hv-empty">Không có nhân viên phù hợp bộ lọc.</div>') + '</div></main>';
   }
 
-  function renderRegions() {
-    const regions = visibleRegions();
-    const rows = regions.map(region => {
+  function renderRegionComparison() {
+    const rows = visibleRegions().map(region => {
       const stats = aggregate(filteredStores(region.id));
-      return `<tr><td>${escapeHtml(region.name)}</td><td>${stats.activeMer}</td><td>${stats.stores}</td><td>${stats.completed}/${stats.target}</td><td>${stats.pending}</td><td>${stats.reportsSent}/${stats.reportTotal}</td><td>${stats.percent}%</td></tr>`;
+      const managed = Mock.employees.filter(employee => employee.regionIds.includes(region.id)).length;
+      return '<tr><th scope="row">' + escapeHtml(region.name) + '</th><td>' + stats.activeMer + '/' + managed  + '</td><td>' + stats.completed + '/' + stats.target + '</td><td>' + stats.pending  + '</td><td>' + (stats.target ? stats.percent + '%' : '—') + '</td></tr>';
     }).join('');
-    return `${appHeader('Báo cáo khu vực', `So sánh · ${formatDate(state.filterDate)}`)}<main class="hv-content">${dateFilter()}<div class="hv-region-grid">${regions.map(region => renderRegionCard(region)).join('')}</div><section class="hv-section"><article class="hv-card">${cardHeading('So sánh khu vực')}<div class="hv-table-scroll"><table class="hv-table"><thead><tr><th>Khu vực</th><th>Mer hoạt động</th><th>Store</th><th>Hoàn thành / Target</th><th>Còn lại</th><th>Đã gửi</th><th>%</th></tr></thead><tbody>${rows}</tbody></table></div></article></section></main>`;
+    return '<section class="hv-section"><article class="hv-card">' + cardHeading('So sánh khu vực') + '<div class="hv-table-scroll"><table class="hv-table"><thead><tr><th>Khu vực</th><th>Nhân sự</th><th>Actual / Plan</th><th>Còn lại</th><th>Hoàn thành</th></tr></thead><tbody>' + rows + '</tbody></table></div></article></section>';
   }
 
-  function renderRegionDetail() {
-    const region = visibleRegions().find(item => item.id === state.selectedRegionId);
-    if (!region) return renderNotFound('Khu vực không nằm trong phạm vi SUP.');
-    const stores = filteredStores(region.id);
-    const stats = aggregate(stores, state.filterDate);
-    const reportStores = stores.filter(store => reportForStore(store.id, state.filterDate)).length;
-    const employees = Mock.employees.filter(employee => stores.some(store => store.employeeId === employee.id));
-    const regionCards = visibleRegions()
-      .map(item => renderRegionCard(item, state.filterDate, item.id === region.id))
-      .join('');
-    return `${appHeader(`Tổng quan ${escapeHtml(region.name)}`, formatDate(state.filterDate))}<main class="hv-content"><div class="hv-region-detail-back">${button('Quay lại tổng quan', 'back-region-detail', { kind: 'secondary', full: true, icon: 'back' })}</div><div class="hv-region-detail-kpis">${renderKpi(String(stats.activeMer), 'Mer hoạt động', '', 'people')}${renderKpi(`${stats.completed}/${stats.target}`, 'Store hoàn thành / Target', '', 'store')}${renderKpi(String(stats.pending), 'Chưa hoàn thành', '', 'clock')}${renderKpi(`${stats.percent}%`, 'Tỷ lệ hoàn thành', '', 'check')}</div><section class="hv-section"><article class="hv-card"><div class="hv-region-detail-progress"><div class="hv-row"><strong>Tiến độ khu vực</strong><strong>${stats.completed}/${stats.target}</strong></div>${displayProgress(stats.percent)}</div><div class="hv-region-detail-totals"><div><span>Báo cáo nhận</span><strong>${reportStores}/${stores.length}</strong></div><div><span>Nhân viên phụ trách</span><strong>${employees.length}</strong></div></div></article></section><section class="hv-section">${sectionHeading('Nhân viên khu vực', `${employees.length} Mer`)}<div class="hv-list">${renderEmployeeCards(stores)}</div></section><section class="hv-section">${sectionHeading('Cửa hàng', `${stores.length} điểm bán · ${stats.completed} đã báo cáo`)}<div class="hv-list">${stores.map(store => renderStoreCard(store)).join('')}</div></section><section class="hv-section">${sectionHeading('Các khu vực SUP phụ trách', 'Chọn khu vực để xem chi tiết')}</section><div class="hv-region-grid hv-region-detail-switcher">${regionCards}</div></main>`;
+  function renderAreaDisplay(reports, regionId = null) {
+    const labels = {outside: 'Ngoài kệ / tủ lạnh', glass: 'Mặt kính', coc: 'Quầy thu ngân', ge: 'Đầu kệ', tree: 'Cây bia'};
+    const totals = Mock.displayFields.map(field => '<div><span>' + labels[field.id] + '</span><strong>' + (reports.length ? reports.reduce((sum, report) => sum + (Number(report.display[field.id]) || 0), 0) : '—') + '</strong></div>').join('');
+    return '<section class="hv-card hv-area-display"><h2>Trưng bày đã ghi nhận</h2><div class="hv-area-display-grid">' + totals + '</div><p>Từ ' + reports.length + ' báo cáo đã nhận</p>' + (regionId ? '<button type="button" class="hv-area-overview-link" data-hv-act="open-completed-stores" data-region-id="' + escapeHtml(regionId) + '">Xem báo cáo tổng quan ' + icon('next', 14) + '</button>' : '') + '</section>';
   }
 
   function renderReports() {
+    if (state.user.role === 'sup') return renderEmployees();
     const stores = filteredStores().filter(store => {
       const employee = employeeById(store.employeeId);
       const search = state.search.toLocaleLowerCase('vi');
@@ -753,12 +774,9 @@
     const store = Mock.stores.find(item => item.id === report.storeId);
     const employee = employeeById(report.employeeId);
     const displayRows = Mock.displayFields.map(field => `<span>${escapeHtml(field.label)}</span><strong>${report.display[field.id]}</strong>`).join('');
-    const backControl = state.user.role === 'mer'
-      ? `<div class="hv-mer-detail-back">${button('Quay lại Summary ngày đã chọn', 'back-mer-dashboard', { kind: 'secondary', full: true, icon: 'back' })}<div class="hv-subtle">Chế độ chỉ xem · ${formatDate(report.date)}</div></div>`
-      : state.reportDetailReturnScreen === 'region-detail' && state.selectedRegionId
-        ? `<div class="hv-region-detail-back">${button(`Quay lại ${escapeHtml(regionById(state.selectedRegionId).name)}`, 'back-region-detail', { kind: 'secondary', full: true, icon: 'back' })}</div>`
-        : '';
-    return `${appHeader('Chi tiết báo cáo', `${formatDate(report.date)} · ${escapeHtml(store.code)}`)}<main class="hv-content">${backControl}<article class="hv-card">${cardHeading(`${storeNumber(store.id)}. ${store.code}`, 'Báo cáo trưng bày')}<div class="hv-report-values"><span>Tên siêu thị</span><strong>${escapeHtml(store.name)}</strong><span>Khu vực</span><strong>${escapeHtml(regionById(store.regionId).name)}</strong><span>Tên Mer</span><strong>${escapeHtml(employee.name)}</strong><span>Ngày báo cáo</span><strong>${formatDate(report.date)}</strong><span>Thời gian gửi</span><strong>${formatDateTime(report.submittedAt)}</strong>${displayRows}<span>Hàng cận date</span><strong>${escapeHtml(report.stock.expiry || 'Không ghi nhận')}</strong><span>Bao bì Tết hiện có</span><strong>${escapeHtml(report.stock.packaging || 'Không ghi nhận')}</strong><span>Ghi chú tồn kho</span><strong>${escapeHtml(report.stock.notes || '—')}</strong><span>Ghi chú</span><strong>${escapeHtml(report.notes || '—')}</strong></div><div style="margin-top:12px">${button('Copy nội dung gửi Zalo', 'copy-mer-report', { full: true, kind: 'secondary', icon: 'copy' })}</div></article><section class="hv-section">${sectionHeading('Ảnh báo cáo', `${report.photoIds.length} ảnh`)}${renderPhotoGallery(report.photoIds, report.photoKinds)}</section></main>`;
+    const backAction = state.user.role === 'sup' ? 'back-sup-report' : 'back-mer-report';
+    const heading = '<span class="hv-report-header-title"><button type="button" class="hv-report-back" data-hv-act="' + backAction + '" aria-label="Quay lại màn hình trước">' + icon('back', 20) + '</button><span>Chi tiết báo cáo</span></span>';
+    return `${appHeader(heading)}<main class="hv-content hv-report-compact"><article class="hv-card">${cardHeading(`${escapeHtml(store.code)} – ${escapeHtml(store.name)}`, 'Báo cáo trưng bày')}<div class="hv-report-values"><span>Khu vực</span><strong>${escapeHtml(regionById(store.regionId).name)}</strong><span>Tên Mer</span><strong>${escapeHtml(employee.name)}</strong><span>Ngày báo cáo</span><strong>${formatDate(report.date)}</strong><span>Thời gian gửi</span><strong>${formatDateTime(report.submittedAt)}</strong>${displayRows}<span>Hàng cận date</span><strong>${escapeHtml(report.stock.expiry || 'Không ghi nhận')}</strong><span>Bao bì Tết hiện có</span><strong>${escapeHtml(report.stock.packaging || 'Không ghi nhận')}</strong><span>Ghi chú tồn kho</span><strong>${escapeHtml(report.stock.notes || '—')}</strong><span>Ghi chú</span><strong>${escapeHtml(report.notes || '—')}</strong></div></article><section class="hv-section hv-card hv-report-photo-card">${sectionHeading('Ảnh báo cáo')}${renderPhotoGallery(report.photoIds, report.photoKinds)}</section></main>`;
   }
 
   function renderPhotoGallery(photoIds, photoKinds = []) {
@@ -782,7 +800,7 @@
       ? 'Tất cả khu vực được giao'
       : regionById(state.filterRegionId).name;
     const reportText = createSupReportText();
-    return `<div class="hv-confirm-backdrop" data-hv-act="close-sup-report-preview"><section class="hv-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="hvReportPreviewTitle" aria-describedby="hvReportPreviewDescription"><div class="hv-confirm-heading"><div><div class="hv-overline">KIỂM TRA TRƯỚC KHI GỬI</div><h2 id="hvReportPreviewTitle">Báo cáo cuối ngày</h2><p id="hvReportPreviewDescription">${formatDate(state.filterDate)} · ${escapeHtml(regionName)}</p></div><button type="button" class="hv-icon-button" data-hv-act="close-sup-report-preview" aria-label="Đóng xem trước">${icon('close', 18)}</button></div><div class="hv-preview-stats"><div><span>Mer hoạt động</span><strong>${stats.activeMer}</strong></div><div><span>Đã trưng bày / Target</span><strong>${stats.completed}/${stats.target}</strong></div><div><span>Báo cáo gửi / Tổng</span><strong>${stats.reportsSent}/${stats.reportTotal}</strong></div><div><span>Hoàn thành</span><strong>${stats.percent}%</strong></div></div><div class="hv-help">Số liệu được tính theo bộ lọc ngày và khu vực trên Dashboard. Kiểm tra nội dung trước khi tiếp tục.</div><details class="hv-preview-details"><summary>Xem nội dung báo cáo</summary><pre>${escapeHtml(reportText)}</pre></details><div class="hv-preview-actions"><button type="button" class="hv-button full" data-hv-act="confirm-sup-system">${icon('send', 17)} Gửi lên hệ thống</button><button type="button" class="hv-button secondary full" data-hv-act="confirm-sup-zalo">${icon('copy', 17)} Copy / chia sẻ Zalo</button></div><div class="hv-subtle hv-preview-disclaimer">Gửi lên hệ thống được mô phỏng và chỉ lưu trên thiết bị. Zalo sẽ mở bảng chia sẻ hoặc sao chép nội dung; chưa gửi tự động.</div></section></div>`;
+    return `<div class="hv-confirm-backdrop" data-hv-act="close-sup-report-preview"><section class="hv-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="hvReportPreviewTitle" aria-describedby="hvReportPreviewDescription"><div class="hv-confirm-heading"><div><div class="hv-overline">KIỂM TRA TRƯỚC KHI GỬI</div><h2 id="hvReportPreviewTitle">Báo cáo cuối ngày</h2><p id="hvReportPreviewDescription">${formatDate(state.filterDate)} · ${escapeHtml(regionName)}</p></div><button type="button" class="hv-icon-button" data-hv-act="close-sup-report-preview" aria-label="Đóng xem trước">${icon('close', 18)}</button></div><div class="hv-preview-stats"><div><span>Mer hoạt động</span><strong>${stats.activeMer}</strong></div><div><span>Đã trưng bày / PLAN</span><strong>${stats.completed}/${stats.target}</strong></div><div><span>Báo cáo nhận / Total PLAN</span><strong>${stats.reportsSent}/${stats.reportTotal}</strong></div><div><span>Hoàn thành</span><strong>${stats.percent}%</strong></div></div><div class="hv-help">Số liệu được tính theo bộ lọc ngày và khu vực trên Dashboard. Kiểm tra nội dung trước khi tiếp tục.</div><details class="hv-preview-details"><summary>Xem nội dung báo cáo</summary><pre>${escapeHtml(reportText)}</pre></details><div class="hv-preview-actions"><button type="button" class="hv-button full" data-hv-act="confirm-sup-system">${icon('send', 17)} Gửi lên hệ thống</button><button type="button" class="hv-button secondary full" data-hv-act="confirm-sup-zalo">${icon('copy', 17)} Copy / chia sẻ Zalo</button></div><div class="hv-subtle hv-preview-disclaimer">Gửi lên hệ thống được mô phỏng và chỉ lưu trên thiết bị. Zalo sẽ mở bảng chia sẻ hoặc sao chép nội dung; chưa gửi tự động.</div></section></div>`;
   }
 
   function renderAccount() {
@@ -832,7 +850,7 @@ Nhân viên ra thị trường: ${stats.activeMer}
 
 Số Store đã trưng bày / Số Target: ${stats.completed}/${stats.target}
 
-Số báo cáo gửi lên group Zalo / hệ thống: ${stats.reportsSent}/${stats.reportTotal}`;
+Số báo cáo đã nhận / Total PLAN: ${stats.reportsSent}/${stats.reportTotal}`;
   }
 
   function prepareDraft(store) {
@@ -1152,8 +1170,10 @@ Số báo cáo gửi lên group Zalo / hệ thống: ${stats.reportsSent}/${stat
   }
 
   function navigate(screen) {
+    if (state.user.role === 'sup' && screen === 'reports') screen = 'employees';
+    if (state.user.role === 'sup' && screen === 'regions') screen = 'dashboard';
     const allowed = state.user.role === 'sup'
-      ? ['dashboard', 'employees', 'regions', 'reports', 'account']
+      ? ['dashboard', 'employees', 'reports', 'account']
       : ['dashboard', 'report-list', 'history', 'account'];
     if (!allowed.includes(screen)) {
       showToast('Màn hình này không nằm trong vai trò hiện tại.', 'error');
@@ -1397,26 +1417,57 @@ Số báo cáo gửi lên group Zalo / hệ thống: ${stats.reportsSent}/${stat
       case 'choose-report-store':
         navigate('report-list');
         break;
+      case 'mer-store-status':
+        if (state.user.role !== 'mer' || !['all', 'pending', 'done'].includes(buttonElement.dataset.status)) break;
+        state.merStoreStatus = buttonElement.dataset.status;
+        render();
+        break;
+      case 'team-toggle':
+        state.expandedEmployeeId = state.expandedEmployeeId === buttonElement.dataset.employeeId ? '' : buttonElement.dataset.employeeId;
+        state.teamShowAll = false;
+        render();
+        break;
+      case 'team-more':
+        state.expandedEmployeeId = buttonElement.dataset.employeeId;
+        state.teamShowAll = true;
+        render();
+        break;
+      case 'team-status':
+        state.teamStatus = buttonElement.dataset.status;
+        render();
+        break;
+      case 'back-sup-report':
+        if (state.user.role !== 'sup') break;
+        state.screen = ['employees', 'reports', 'employee-detail', 'dashboard'].includes(state.reportDetailReturnScreen) ? state.reportDetailReturnScreen : 'employees';
+        render();
+        break;
+      case 'back-team':
+        state.screen = 'employees';
+        render();
+        break;
+      case 'open-completed-stores': {
+        const regionId = buttonElement.dataset.regionId;
+        if (state.user.role !== 'sup' || !visibleRegions().some(region => region.id === regionId)) break;
+        state.filterRegionId = regionId;
+        state.teamStatus = 'stores-done';
+        state.search = '';
+        state.expandedEmployeeId = '';
+        state.teamShowAll = false;
+        state.screen = 'employees';
+        render();
+        break;
+      }
       case 'select-region': {
         const regionId = buttonElement.dataset.regionId;
         if (!visibleRegions().some(region => region.id === regionId)) {
           showToast('Khu vực này không nằm trong phạm vi SUP.', 'error');
           break;
         }
-        state.regionDetailReturnScreen = state.screen === 'regions' ? 'regions' : 'dashboard';
-        state.selectedRegionId = regionId;
-        state.filterRegionId = 'all';
-        state.screen = 'region-detail';
+        state.filterRegionId = regionId;
+        state.screen = 'dashboard';
         render();
         break;
       }
-      case 'back-region-detail':
-        state.screen = state.screen === 'report-detail'
-          ? state.reportDetailReturnScreen
-          : state.regionDetailReturnScreen;
-        if (state.screen !== 'regions' && state.screen !== 'region-detail') state.screen = 'dashboard';
-        render();
-        break;
       case 'mer-date-prev':
       case 'mer-date-next': {
         if (state.user.role !== 'mer' || state.screen !== 'dashboard') break;
@@ -1446,6 +1497,11 @@ Số báo cáo gửi lên group Zalo / hệ thống: ${stats.reportsSent}/${stat
         render();
         break;
       }
+      case 'back-mer-report':
+        if (state.user.role !== 'mer') break;
+        state.screen = ['dashboard', 'history', 'report-list'].includes(state.reportDetailReturnScreen) ? state.reportDetailReturnScreen : 'dashboard';
+        render();
+        break;
       case 'back-mer-dashboard':
         if (state.user.role !== 'mer') break;
         state.screen = 'dashboard';
