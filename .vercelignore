@@ -1,0 +1,7 @@
+backend/
+tests/
+database/
+.env
+.env.*
+**/.private/**
+**/node_modules/**

@@ -1,5 +1,11 @@
 # HVN Mer · Mobile Webview
 
+## Kết nối Supabase cho SUP
+
+Đã thêm chế độ SUP đọc dữ liệu Supabase, đăng nhập bằng email/mật khẩu Auth và cập nhật bằng nút trên Dashboard. Mặc định vẫn chạy demo. Làm theo [hướng dẫn test Supabase](docs/SUPABASE-SUP-TEST.md) để chạy SQL, cấp quyền SUP và cấu hình `supabase-config.js` trước khi deploy Vercel.
+
+Kiểm tra adapter bằng `node --test tests/supabase-data.test.cjs`. Chế độ Supabase hiện chỉ đọc, chưa ghi báo cáo MER hoặc kết nối ảnh/Zalo.
+
 ## Chạy ứng dụng
 
 1. Mở thư mục này bằng VS Code.

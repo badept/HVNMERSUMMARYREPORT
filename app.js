@@ -2,6 +2,10 @@
   'use strict';
 
   const Mock = window.HvnMockData;
+  const remote = window.HvnSupabase;
+  const cloudMode = remote?.enabled === true;
+  let loginPending = false;
+  let refreshPending = false;
   const root = document.getElementById('hvnRoot');
   const DATA_KEY = 'hvn-mer-webview-data-v1';
   const DATABASE_NAME = 'hvn-mer-webview-images-v1';
@@ -260,6 +264,7 @@
   }
 
   function persistData(data = state.data) {
+    if (cloudMode) throw new Error('Chế độ Supabase hiện chỉ hỗ trợ SUP xem dữ liệu.');
     try {
       localStorage.setItem(DATA_KEY, JSON.stringify(data));
     } catch {
@@ -526,14 +531,17 @@
   }
 
   function renderLogin() {
+    if (cloudMode) return `<main class="hv-login-wrap"><section class="hv-login"><h1>Đăng nhập SUP</h1><p>Xem dữ liệu từ Supabase.</p><form id="hvLoginForm"><div class="hv-field"><label for="hvUsername">Email</label><input class="hv-input" id="hvUsername" name="username" type="email" autocomplete="username" required></div><div class="hv-field"><label for="hvPassword">Mật khẩu</label><input class="hv-input" id="hvPassword" name="password" type="password" autocomplete="current-password" required></div>${state.loginError ? `<div class="hv-login-error" role="alert">${escapeHtml(state.loginError)}</div>` : ''}${button(loginPending ? 'Đang đăng nhập…' : 'Đăng nhập', 'login', { full: true, disabled: loginPending })}</form><div class="hv-help">Dùng tài khoản được cấp quyền SUP. Tải lại trang sẽ yêu cầu đăng nhập lại.</div></section></main>`;
     return `<main class="hv-login-wrap"><section class="hv-login" aria-labelledby="hv-login-title"><h1 id="hv-login-title">Đăng nhập</h1><p>Đăng nhập demo để mở đúng màn hình theo vai trò.</p><form id="hvLoginForm"><div class="hv-field"><label for="hvUsername">Mã nhân viên</label><input class="hv-input" id="hvUsername" name="username" autocomplete="username" placeholder="Nhập mã nhân viên" required></div><div class="hv-field"><label for="hvPassword">Mật khẩu</label><input class="hv-input" id="hvPassword" name="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" required></div>${state.loginError ? `<div class="hv-login-error" role="alert">${escapeHtml(state.loginError)}</div>` : ''}<div style="margin-top:16px">${button('Đăng nhập', 'login', { full: true })}</div></form><div class="hv-demo-accounts"><div class="hv-overline">Tài khoản demo</div><button type="button" class="hv-demo-account" data-hv-act="fill-login" data-demo-user="mer001"><span>Mer · Phạm Hải Đăng</span><b>mer001 / 123456</b></button><button type="button" class="hv-demo-account" data-hv-act="fill-login" data-demo-user="sup001"><span>Sup · Nguyễn Xuân Toàn</span><b>sup001 / 123456</b></button></div><div class="hv-help">Đăng nhập chỉ mô phỏng frontend; không phải cơ chế xác thực bảo mật.</div></section></main>`;
   }
 
   function renderLoading() {
+    if (cloudMode) return '<main class="hv-loading" role="status"><section class="hv-login"><strong>Đang tải dữ liệu Supabase…</strong></section></main>';
     return `<main class="hv-loading" role="status"><section class="hv-login"><div class="hv-skeleton"></div><strong>Đang mở HVN Mer…</strong><p class="hv-subtle">Đang tải dữ liệu demo và kho ảnh trên thiết bị.</p></section></main>`;
   }
 
   function renderStorageError() {
+    if (cloudMode) return `<main class="hv-login-wrap"><section class="hv-login"><h1>Không thể kết nối</h1><p>${escapeHtml(state.storageError)}</p>${button('Thử lại', 'retry-storage', { full: true })}</section></main>`;
     return `<main class="hv-login-wrap"><section class="hv-login"><h1>Không thể tải dữ liệu</h1><p>${escapeHtml(state.storageError || 'Kho lưu trữ không sẵn sàng.')}</p><div class="hv-help">Ảnh được lưu trên thiết bị bằng IndexedDB; dữ liệu báo cáo được lưu bằng LocalStorage.</div><div class="hv-list" style="margin-top:14px"><button class="hv-button secondary full" data-hv-act="retry-storage">Thử tải lại</button><button class="hv-button danger full" data-hv-act="reset-storage">Xóa dữ liệu demo lỗi và tạo lại</button></div></section></main>`;
   }
 
@@ -601,7 +609,7 @@
     const stores = filteredStores();
     const stats = aggregate(stores);
     const regions = visibleRegions().filter(region => state.filterRegionId === 'all' || region.id === state.filterRegionId);
-    return appHeader('Báo cáo trong ngày', '<span class="hv-sup-identity">SUP ' + escapeHtml(person.name) + '</span>') + '<main class="hv-content hv-sup-overview"><div class="hv-filter-row">' + dateFilter() + regionFilter() + '</div>' + renderSupMetrics(stores, regions) +
+    return appHeader('Báo cáo trong ngày', '<span class="hv-sup-identity">SUP ' + escapeHtml(person.name) + '</span>') + '<main class="hv-content hv-sup-overview">' + (cloudMode ? '<div class="hv-help">Nguồn: Supabase · ' + button(refreshPending ? 'Đang cập nhật…' : 'Cập nhật dữ liệu', 'refresh-supabase', { small: true, disabled: refreshPending }) + '</div>' : '') + '<div class="hv-filter-row">' + dateFilter() + regionFilter() + '</div>' + renderSupMetrics(stores, regions) +
        (state.filterRegionId !== 'all' && regions.length === 1
         ? '<div class="hv-section">' + renderAreaDisplay(stats.reports, regions[0].id) + '</div>'
         : '<section class="hv-section">' + sectionHeading('Tiến độ khu vực') + '<div class="hv-region-grid">' + regions.map(region => renderRegionCard(region)).join('') + '</div></section>' + renderRegionComparison()) + '</main>';
@@ -800,6 +808,7 @@
       ? 'Tất cả khu vực được giao'
       : regionById(state.filterRegionId).name;
     const reportText = createSupReportText();
+    if (cloudMode) return `<div class="hv-confirm-backdrop"><section class="hv-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="hvReportPreviewTitle"><h2 id="hvReportPreviewTitle">Báo cáo cuối ngày</h2><p>Chế độ xem dữ liệu Supabase. Chưa kết nối gửi báo cáo.</p><pre>${escapeHtml(reportText)}</pre>${button('Đóng', 'close-sup-report-preview', { full: true })}</section></div>`;
     return `<div class="hv-confirm-backdrop" data-hv-act="close-sup-report-preview"><section class="hv-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="hvReportPreviewTitle" aria-describedby="hvReportPreviewDescription"><div class="hv-confirm-heading"><div><div class="hv-overline">KIỂM TRA TRƯỚC KHI GỬI</div><h2 id="hvReportPreviewTitle">Báo cáo cuối ngày</h2><p id="hvReportPreviewDescription">${formatDate(state.filterDate)} · ${escapeHtml(regionName)}</p></div><button type="button" class="hv-icon-button" data-hv-act="close-sup-report-preview" aria-label="Đóng xem trước">${icon('close', 18)}</button></div><div class="hv-preview-stats"><div><span>Mer hoạt động</span><strong>${stats.activeMer}</strong></div><div><span>Đã trưng bày / PLAN</span><strong>${stats.completed}/${stats.target}</strong></div><div><span>Báo cáo nhận / Total PLAN</span><strong>${stats.reportsSent}/${stats.reportTotal}</strong></div><div><span>Hoàn thành</span><strong>${stats.percent}%</strong></div></div><div class="hv-help">Số liệu được tính theo bộ lọc ngày và khu vực trên Dashboard. Kiểm tra nội dung trước khi tiếp tục.</div><details class="hv-preview-details"><summary>Xem nội dung báo cáo</summary><pre>${escapeHtml(reportText)}</pre></details><div class="hv-preview-actions"><button type="button" class="hv-button full" data-hv-act="confirm-sup-system">${icon('send', 17)} Gửi lên hệ thống</button><button type="button" class="hv-button secondary full" data-hv-act="confirm-sup-zalo">${icon('copy', 17)} Copy / chia sẻ Zalo</button></div><div class="hv-subtle hv-preview-disclaimer">Gửi lên hệ thống được mô phỏng và chỉ lưu trên thiết bị. Zalo sẽ mở bảng chia sẻ hoặc sao chép nội dung; chưa gửi tự động.</div></section></div>`;
   }
 
@@ -807,6 +816,7 @@
     const person = currentPerson();
     const regions = visibleRegions().map(region => region.name).join(' · ');
     const username = state.user.username;
+    if (cloudMode) return `${appHeader('Tài khoản')}<main class="hv-content"><article class="hv-card"><h2>${escapeHtml(person.name)}</h2><p>SUP · ${escapeHtml(username)}</p><p>Khu vực: ${escapeHtml(regions)}</p><p>Dữ liệu Supabase · Chế độ xem. Ảnh chưa được kết nối Storage.</p></article>${button('Đăng xuất', 'logout', { full: true })}</main>`;
     return `${appHeader('Tài khoản', 'Đổi tài khoản demo hoặc đặt lại dữ liệu.') }<main class="hv-content"><article class="hv-card"><div class="hv-row"><div class="hv-row" style="justify-content:flex-start"><span class="hv-avatar">${escapeHtml(person.name.split(' ').map(part => part[0]).slice(-2).join(''))}</span><div><div class="hv-store-title">${escapeHtml(person.name)}</div><div class="hv-store-meta">${state.user.role === 'sup' ? 'SUP · Team Sup' : `Mer · ${state.user.employeeId}`}</div></div></div>${statusChip(state.user.role === 'sup' ? 'SUP' : 'MER')}</div><div class="hv-help">Tài khoản: ${escapeHtml(username)}<br>Khu vực được giao: ${escapeHtml(regions)}</div></article><section class="hv-section"><article class="hv-card">${cardHeading('Phiên bản demo')}<div class="hv-subtle">Đăng nhập và phân quyền chỉ mô phỏng frontend. Dữ liệu báo cáo lưu cục bộ; ảnh lưu trong IndexedDB trên thiết bị này.</div><div class="hv-list" style="margin-top:13px"><button type="button" class="hv-demo-account" data-hv-act="switch-account" data-demo-user="mer001"><span>Đăng nhập Mer</span><b>Phạm Hải Đăng</b></button><button type="button" class="hv-demo-account" data-hv-act="switch-account" data-demo-user="sup001"><span>Đăng nhập SUP</span><b>Nguyễn Xuân Toàn</b></button></div></article></section><section class="hv-section"><article class="hv-card">${cardHeading('Dữ liệu trên thiết bị')}<div class="hv-subtle">Đặt lại báo cáo, check-in và ảnh minh họa về dữ liệu ban đầu. Thao tác này xóa dữ liệu demo hiện tại trên thiết bị.</div><div style="margin-top:12px">${button('Đặt lại dữ liệu demo', 'reset-demo', { kind: 'danger', full: true })}</div></article></section><section class="hv-section">${button('Đăng xuất', 'logout', { kind: 'secondary', full: true, icon: 'logout' })}</section></main>`;
   }
 
@@ -1189,7 +1199,37 @@ Số báo cáo đã nhận / Total PLAN: ${stats.reportsSent}/${stats.reportTota
     render();
   }
 
-  function authenticate(username, password) {
+  function applyRemoteSnapshot(snapshot) {
+    for (const key of ['regions', 'employees', 'supervisors', 'stores']) Mock[key] = snapshot[key];
+    state.data = snapshot.data;
+    state.user = snapshot.user;
+    state.selectedPhotoId = '';
+    state.reportPreviewOpen = false;
+  }
+
+  async function authenticate(username, password) {
+    if (cloudMode) {
+      if (loginPending) return;
+      loginPending = true;
+      state.loginError = '';
+      render();
+      try {
+        applyRemoteSnapshot(await remote.login(username, password));
+        state.filterRegionId = 'all';
+        state.filterDate = localDateISO();
+        state.search = '';
+        state.teamStatus = 'all';
+        state.expandedEmployeeId = '';
+        state.screen = 'dashboard';
+      } catch (error) {
+        state.user = null;
+        state.loginError = error.message || 'Không thể đăng nhập Supabase.';
+      } finally {
+        loginPending = false;
+        render();
+      }
+      return;
+    }
     const account = Mock.accounts.find(item => item.username === username.trim() && item.password === password);
     if (!account) {
       state.loginError = 'Mã nhân viên hoặc mật khẩu chưa đúng.';
@@ -1382,6 +1422,10 @@ Số báo cáo đã nhận / Total PLAN: ${stats.reportsSent}/${stats.reportTota
     if (!buttonElement || !root.contains(buttonElement)) return;
     event.stopPropagation();
     const action = buttonElement.dataset.hvAct;
+    if (cloudMode && ['fill-login', 'switch-account', 'reset-demo', 'reset-storage', 'confirm-sup-system', 'confirm-sup-zalo'].includes(action)) {
+      showToast('Chế độ Supabase hiện chỉ hỗ trợ xem dữ liệu; chưa kết nối gửi báo cáo.', 'error');
+      return;
+    }
     if (state.pendingPhotoFiles || state.savingReport) {
       showToast(state.savingReport ? 'Đang lưu báo cáo. Vui lòng đợi.' : 'Đang xử lý ảnh. Vui lòng đợi hoàn tất.', 'error');
       return;
@@ -1391,6 +1435,21 @@ Số báo cáo đã nhận / Total PLAN: ${stats.reportsSent}/${stats.reportTota
       return;
     }
     switch (action) {
+      case 'refresh-supabase':
+        if (!cloudMode || !state.user || refreshPending) return;
+        refreshPending = true;
+        render();
+        try {
+          const snapshot = await remote.load();
+          if (!state.user) return;
+          applyRemoteSnapshot(snapshot);
+          if (!visibleRegions().some(region => region.id === state.filterRegionId)) state.filterRegionId = 'all';
+          showToast('Đã cập nhật dữ liệu từ Supabase.');
+        } finally {
+          refreshPending = false;
+          render();
+        }
+        break;
       case 'login': {
         const form = root.querySelector('#hvLoginForm');
         authenticate(form.elements.username.value, form.elements.password.value);
@@ -1638,6 +1697,11 @@ Số báo cáo đã nhận / Total PLAN: ${stats.reportsSent}/${stats.reportTota
         break;
       case 'logout':
         showSignIn();
+        if (cloudMode) {
+          state.data = null;
+          for (const key of ['regions', 'employees', 'supervisors', 'stores']) Mock[key] = [];
+          await remote.logout();
+        }
         break;
       default:
         break;
@@ -1742,6 +1806,18 @@ Số báo cáo đã nhận / Total PLAN: ${stats.reportsSent}/${stats.reportTota
     state.screen = 'loading';
     state.storageError = '';
     render();
+    if (cloudMode) {
+      try {
+        remote.validateConfig();
+        state.user = null;
+        state.screen = 'login';
+      } catch (error) {
+        state.screen = 'storage-error';
+        state.storageError = error.message;
+      }
+      render();
+      return;
+    }
     try {
       database = await openDatabase();
       state.data = localDataOrSeed();

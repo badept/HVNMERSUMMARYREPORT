@@ -1,0 +1,15 @@
+{
+  "name": "hvn-zalo-poc",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "zalo:login": "node zalo-poc.mjs login",
+    "zalo:test": "node zalo-poc.mjs test",
+    "zalo:report": "node --env-file-if-exists=.env zalo-poc.mjs report",
+    "zalo:preview": "node --env-file-if-exists=.env zalo-poc.mjs report --preview",
+    "zalo:groups": "node zalo-poc.mjs groups",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": { "zca-js": "2.4.0" }
+}
